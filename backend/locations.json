@@ -1,0 +1,92 @@
+[
+  {
+    "id": "loc-noney",
+    "name": "Noney (Tupul Railway Corridor)",
+    "state": "Manipur",
+    "latitude": 24.7174,
+    "longitude": 93.6331,
+    "corridor": "Jiribam-Imphal Railway Line",
+    "critical_threshold_mm": 110.0
+  },
+  {
+    "id": "loc-aizawl",
+    "name": "Aizawl Melthum Ridge",
+    "state": "Mizoram",
+    "latitude": 23.7271,
+    "longitude": 92.7176,
+    "corridor": "NH-54 / Aizawl-Lunglei Ridge",
+    "critical_threshold_mm": 95.0
+  },
+  {
+    "id": "loc-mawsynram",
+    "name": "East Khasi Hills (Mawsynram)",
+    "state": "Meghalaya",
+    "latitude": 25.2970,
+    "longitude": 91.5822,
+    "corridor": "Shillong-Mawsynram Highway",
+    "critical_threshold_mm": 130.0
+  },
+  {
+    "id": "loc-cherra",
+    "name": "East Khasi Hills (Cherrapunji)",
+    "state": "Meghalaya",
+    "latitude": 25.2800,
+    "longitude": 91.7300,
+    "corridor": "Sohra Ridge Pass",
+    "critical_threshold_mm": 125.0
+  },
+  {
+    "id": "loc-sonapur",
+    "name": "Sonapur Tunnel Corridor (NH-6)",
+    "state": "Meghalaya",
+    "latitude": 25.1235,
+    "longitude": 92.3651,
+    "corridor": "NH-6 Jaintia Hills Lifeline",
+    "critical_threshold_mm": 85.0
+  },
+  {
+    "id": "loc-haflong",
+    "name": "Haflong Hill Slopes (Dima Hasao)",
+    "state": "Assam",
+    "latitude": 25.1760,
+    "longitude": 93.0240,
+    "corridor": "Lumding-Badarpur Hill Section",
+    "critical_threshold_mm": 90.0
+  },
+  {
+    "id": "loc-kohima",
+    "name": "Kohima High Ridge Pass",
+    "state": "Nagaland",
+    "latitude": 25.6751,
+    "longitude": 94.1086,
+    "corridor": "NH-29 Dimapur-Kohima Road",
+    "critical_threshold_mm": 80.0
+  },
+  {
+    "id": "loc-bhalukpong",
+    "name": "Bhalukpong Highway Pass",
+    "state": "Arunachal Pradesh",
+    "latitude": 27.0120,
+    "longitude": 92.6500,
+    "corridor": "Balipara-Charduar-Tawang Road",
+    "critical_threshold_mm": 100.0
+  },
+  {
+    "id": "loc-mangan",
+    "name": "Mangan North Sikkim",
+    "state": "Sikkim",
+    "latitude": 27.5050,
+    "longitude": 88.5330,
+    "corridor": "North Sikkim Highway (NH-310A)",
+    "critical_threshold_mm": 105.0
+  },
+  {
+    "id": "loc-guwahati",
+    "name": "Guwahati Brahmaputra Valley",
+    "state": "Assam",
+    "latitude": 26.1445,
+    "longitude": 91.7362,
+    "corridor": "GS Road Urban Corridor",
+    "critical_threshold_mm": 140.0
+  }
+]

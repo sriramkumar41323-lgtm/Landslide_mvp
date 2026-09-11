@@ -1,0 +1,132 @@
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg-primary: #070b12;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #070b12;
+  color: #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* Custom Tactical Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0b1321;
+}
+::-webkit-scrollbar-thumb {
+  background: #1d3356;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+}
+
+/* Leaflet Map overrides for Tactical Dark aesthetic */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #070b12 !important;
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #0f1b2f !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(6, 182, 212, 0.4) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7), 0 0 15px rgba(6, 182, 212, 0.2) !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-tip {
+  background: #0f1b2f !important;
+  border: 1px solid rgba(6, 182, 212, 0.4) !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.leaflet-bar a {
+  background-color: #0f1b2f !important;
+  color: #06b6d4 !important;
+  border-bottom: 1px solid #1d3356 !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #1d3356 !important;
+  color: #ffffff !important;
+}
+
+/* Custom Marker Pulse Rings */
+@keyframes beacon-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.beacon-ring-red {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.6);
+  animation: beacon-pulse 1.8s infinite ease-out;
+}
+
+.beacon-ring-amber {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(245, 158, 11, 0.6);
+  animation: beacon-pulse 2.2s infinite ease-out;
+}
+
+.beacon-ring-green {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: rgba(16, 185, 129, 0.4);
+  animation: beacon-pulse 2.8s infinite ease-out;
+}
+
+/* Subtle scanlines effect on command panels */
+.scanlines-overlay {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 6px 100%;
+  pointer-events: none;
+}
