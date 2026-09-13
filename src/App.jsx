@@ -7,23 +7,24 @@ import FieldReportModal from './components/FieldReportModal';
 import StormAlertBanner from './components/StormAlertBanner';
 import AlertLogPanel from './components/AlertLogPanel';
 import EvaluatorSandboxModal from './components/EvaluatorSandboxModal';
+import TelemetryHUD from './components/TelemetryHUD';
 import { CITIZEN_FEED_REPORTS } from './data/citizenReportsData';
 import { ARTERIAL_HIGHWAYS } from './data/northEastGISData';
-import { 
-  calculateSeverity, 
-  generateDynamicAlerts, 
-  generateEmergencyQueue 
+import {
+  calculateSeverity,
+  generateDynamicAlerts,
+  generateEmergencyQueue
 } from './services/telemetryEngine';
-import { 
-  getAllActiveReports, 
-  getPendingLocalReports, 
-  savePendingLocalReport, 
-  addDirectOnlineReport, 
-  syncPendingReports 
+import {
+  getAllActiveReports,
+  getPendingLocalReports,
+  savePendingLocalReport,
+  addDirectOnlineReport,
+  syncPendingReports
 } from './services/offlineStorage';
-import { 
-  insertFieldReport, 
-  fetchFieldReports, 
+import {
+  insertFieldReport,
+  fetchFieldReports,
   subscribeToFieldReports,
   fetchLocationRisks,
   subscribeToLocationRisk,
@@ -69,6 +70,29 @@ export default function App() {
   // Mobile tab switcher ('feed' | 'map' | 'dashboard')
   const [mobileTab, setMobileTab] = useState('map');
   const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showLeftFeed, setShowLeftFeed] = useState(true);
+
+  // Delete a specific hazard report from feed
+  const handleDeleteReport = (reportId) => {
+    setHazardReports(prev => prev.filter(r => r.id !== reportId));
+    if (selectedReport?.id === reportId) {
+      setSelectedReport(null);
+    }
+  };
+
+  // Delete/clear only the photo attachment of a hazard report
+  const handleDeleteImage = (reportId) => {
+    setHazardReports(prev => prev.map(r => {
+      if (r.id === reportId) {
+        const updated = { ...r };
+        delete updated.image;
+        delete updated.image_data;
+        updated.hasDeletedImage = true;
+        return updated;
+      }
+      return r;
+    }));
+  };
 
   // Load initial reports while keeping curated visual reports
   const refreshReportList = useCallback(() => {
@@ -254,7 +278,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#070e17] text-slate-900 overflow-hidden font-sans">
-      
+
       {/* 1. Command Center Top Header */}
       <Navbar
         isOfflineSimulated={isOfflineSimulated}
@@ -269,6 +293,8 @@ export default function App() {
         severity={severity}
         showRightPanel={showRightPanel}
         setShowRightPanel={setShowRightPanel}
+        showLeftFeed={showLeftFeed}
+        setShowLeftFeed={setShowLeftFeed}
         onOpenAlertLog={() => setIsAlertPanelOpen(true)}
         onOpenSandboxModal={() => setIsSandboxModalOpen(true)}
       />
@@ -318,16 +344,21 @@ export default function App() {
 
       {/* 5. Full 3-Column Command Center Display Layout */}
       <main className="flex-1 relative flex overflow-hidden bg-slate-100">
-        
+
         {/* COLUMN 1: Citizen Field Reporting Feed (Left) */}
-        <div className={`${mobileTab === 'feed' ? 'flex' : 'hidden lg:flex'} h-full shrink-0`}>
-          <CitizenReportingFeed
-            reports={hazardReports}
-            selectedReportId={selectedReport?.id}
-            onSelectReport={(rep) => setSelectedReport(rep)}
-            onOpenReportModal={() => setIsReportModalOpen(true)}
-          />
-        </div>
+        {showLeftFeed && (
+          <div className={`${mobileTab === 'feed' ? 'flex' : 'hidden lg:flex'} h-full shrink-0 animate-in slide-in-from-left duration-200`}>
+            <CitizenReportingFeed
+              reports={hazardReports}
+              selectedReportId={selectedReport?.id}
+              onSelectReport={(rep) => setSelectedReport(rep)}
+              onOpenReportModal={() => setIsReportModalOpen(true)}
+              onCloseFeed={() => setShowLeftFeed(false)}
+              onDeleteReport={handleDeleteReport}
+              onDeleteImage={handleDeleteImage}
+            />
+          </div>
+        )}
 
         {/* COLUMN 2: Center Interactive GIS Map with Heatmap & Geo-markers */}
         <div className={`flex-1 relative h-full ${mobileTab === 'map' ? 'block' : mobileTab === 'dashboard' ? 'hidden lg:block' : 'hidden md:block'}`}>
@@ -339,11 +370,40 @@ export default function App() {
             locationRisks={locationRisks}
           />
 
+          {/* Floating Button to Re-open Control Center Feed if closed */}
+          {!showLeftFeed && (
+            <button
+              onClick={() => setShowLeftFeed(true)}
+              title="Open Control Center Citizen Feed"
+              className="absolute top-14 left-3 z-20 hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-xs font-bold text-slate-800 shadow-md hover:bg-slate-50 transition-all cursor-pointer animate-in fade-in"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Open Control Center Feed ({hazardReports.length})</span>
+            </button>
+          )}
+
+          {/* Live Atmospheric & Geotechnical Telemetry HUD (Clean Design) */}
+          <TelemetryHUD
+            telemetry={telemetry}
+            severity={severity}
+            isStormSimulated={isStormSimulated}
+            onStationChange={(station, weather) => {
+              if (weather && weather.temperature !== undefined) {
+                setTelemetry(prev => ({
+                  ...prev,
+                  rainfallMm: weather.precipitationRate,
+                  soilSaturation: weather.soilSaturation,
+                  aiRiskProbability: Math.min(99, Math.max(15, (weather.precipitationRate * 0.4) + (weather.soilSaturation * 0.5)))
+                }));
+              }
+            }}
+          />
+
           {/* Floating Button to Re-open Risk & Forecasts panel if closed */}
           {!showRightPanel && (
             <button
               onClick={() => setShowRightPanel(true)}
-              className="absolute top-14 right-3 z-20 hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-xs font-bold text-slate-800 shadow-md hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-14 right-3 z-20 hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-xs font-bold text-slate-800 shadow-md hover:bg-slate-50 transition-all cursor-pointer animate-in fade-in"
             >
               <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
               <span>Open Risk & Forecasts (4 Cards)</span>
@@ -376,9 +436,8 @@ export default function App() {
           {selectedReport && (
             <div className="absolute bottom-4 left-4 z-20 max-w-sm bg-white/95 backdrop-blur-md rounded-lg p-3 border border-slate-300 shadow-xl text-xs space-y-1">
               <div className="flex items-center justify-between">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                  selectedReport.report_type === 'climate_weather' ? 'bg-sky-600' : 'bg-amber-600'
-                }`}>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${selectedReport.report_type === 'climate_weather' ? 'bg-sky-600' : 'bg-amber-600'
+                  }`}>
                   {selectedReport.report_type === 'climate_weather' ? '⛈ Climate Event' : '▲ Mountain Crack'}
                 </span>
                 <button
@@ -411,7 +470,7 @@ export default function App() {
               telemetry={telemetry}
               severity={severity}
               highways={highways}
-              onToggleHighwayStatus={() => {}}
+              onToggleHighwayStatus={() => { }}
               onClose={() => setShowRightPanel(false)}
             />
           </div>

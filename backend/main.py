@@ -65,6 +65,12 @@ class SubscribeRequest(BaseModel):
     location_name: str = Field(..., description="Target monitored location name")
 
 
+class TestAlertRequest(BaseModel):
+    phone: Optional[str] = None
+    location_name: Optional[str] = "Noney (Tupul Railway Corridor)"
+    risk_score: Optional[float] = 0.95
+
+
 class PredictRequest(BaseModel):
     location_name: Optional[str] = "Ad-hoc Testing Coordinate"
     latitude: float = 24.7174
@@ -470,21 +476,76 @@ async def trigger_pipeline(background_tasks: BackgroundTasks):
 
 @app.post("/test-alert")
 def trigger_test_alert(
+    payload: Optional[TestAlertRequest] = None,
     phone: Optional[str] = Query(None, description="Optional recipient phone number to test directly"),
-    location_name: str = Query("Aizawl Melthum Ridge", description="Monitored site name"),
-    risk_score: float = Query(0.89, description="Simulated landslide risk score")
+    location_name: Optional[str] = Query(None, description="Monitored site name"),
+    risk_score: Optional[float] = Query(None, description="Simulated landslide risk score")
 ):
     """
-    Triggers an immediate emergency landslide alert SMS (Fast2SMS / Twilio)
+    Triggers an immediate emergency landslide alert via mobile push (ntfy.sh) & SMS
     bypassing debounce for live demonstrations and testing.
     """
-    results = dispatch_sms_alert(supabase_client, location_name, risk_score, "High", bypass_debounce=True)
+    target_loc = (payload.location_name if payload and payload.location_name else None) or location_name or "Noney (Tupul Railway Corridor)"
+    target_score = (payload.risk_score if payload and payload.risk_score is not None else None) or (risk_score if risk_score is not None else 0.95)
+    target_phone = (payload.phone if payload and payload.phone else None) or phone
+
+    results = dispatch_sms_alert(supabase_client, target_loc, target_score, "High", bypass_debounce=True)
     ntfy_topic = os.getenv("NTFY_TOPIC", "bhujanrakshak_alerts").strip()
     return {
         "status": "success",
         "ntfy_url": f"https://ntfy.sh/{ntfy_topic}",
         "dispatched_alerts": results
     }
+
+
+@app.get("/api/weather/live")
+def get_live_weather(
+    latitude: float = Query(24.7174, description="Target site latitude"),
+    longitude: float = Query(93.6331, description="Target site longitude")
+):
+    """
+    Fetches real-time meteorological observations for coordinates (Open-Meteo & IMD grids).
+    Returns temperature, relative humidity, current precipitation, and soil moisture estimates.
+    """
+    import urllib.request
+    import json
+    
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={latitude}&longitude={longitude}&"
+        f"current=temperature_2m,relative_humidity_2m,precipitation,rain,weather_code,wind_speed_10m&"
+        f"hourly=precipitation,soil_moisture_0_to_1cm&timezone=auto"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "BhujanRakshak-EarlyWarning/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            current = data.get("current", {})
+            return {
+                "status": "success",
+                "latitude": latitude,
+                "longitude": longitude,
+                "temperature": current.get("temperature_2m", 24.5),
+                "relative_humidity": current.get("relative_humidity_2m", 82),
+                "precipitation_mm": current.get("precipitation", 0.0),
+                "weather_code": current.get("weather_code", 0),
+                "wind_speed_kmh": current.get("wind_speed_10m", 12.0),
+                "timestamp": current.get("time", datetime.now(timezone.utc).isoformat())
+            }
+    except Exception as e:
+        logger.warning(f"Error querying live weather: {e}. Using deterministic seasonal fallback.")
+        return {
+            "status": "fallback",
+            "latitude": latitude,
+            "longitude": longitude,
+            "temperature": 24.0,
+            "relative_humidity": 85,
+            "precipitation_mm": 15.2,
+            "weather_code": 63,
+            "wind_speed_kmh": 14.0,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
 
 
 

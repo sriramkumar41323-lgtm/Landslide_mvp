@@ -30,6 +30,8 @@ export default function Navbar({
   severity,
   showRightPanel,
   setShowRightPanel,
+  showLeftFeed,
+  setShowLeftFeed,
   onOpenAlertLog,
   onOpenSandboxModal
 }) {
@@ -107,11 +109,25 @@ export default function Navbar({
           </span>
         </div>
 
+        {/* Toggle Button: Control Center Feed */}
+        <button
+          onClick={() => setShowLeftFeed(!showLeftFeed)}
+          title="Toggle Citizen Control Center Feed sidebar"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold border transition-all cursor-pointer ${
+            showLeftFeed 
+              ? 'bg-emerald-700 text-white border-emerald-500 shadow-sm' 
+              : 'bg-[#132845] text-slate-300 hover:text-white border-slate-600/80 hover:border-slate-500'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-emerald-300" />
+          <span className="hidden sm:inline">Feed</span>
+        </button>
+
         {/* Toggle Button: Risk Severity & Forecasts (4 Cards) */}
         <button
           onClick={() => setShowRightPanel(!showRightPanel)}
           title="Toggle Risk Severity Levels, Weather Forecasts, and Road Status cards"
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold border transition-all ${
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold border transition-all cursor-pointer ${
             showRightPanel 
               ? 'bg-sky-700 text-white border-sky-500 shadow-sm' 
               : 'bg-[#132845] text-slate-300 hover:text-white border-slate-600/80 hover:border-slate-500'

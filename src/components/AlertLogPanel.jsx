@@ -18,13 +18,16 @@ import {
   fetchAlertHistory, 
   subscribeToAlertLog, 
   triggerBackendPipeline, 
-  subscribePhoneNumber 
+  subscribePhoneNumber,
+  triggerTestAlert
 } from '../services/supabaseClient';
 
 export default function AlertLogPanel({ isOpen, onClose, monitoredLocations = [] }) {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
+  const [alertFeedback, setAlertFeedback] = useState(null);
   const [filterLevel, setFilterLevel] = useState('ALL');
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   
@@ -81,6 +84,33 @@ export default function AlertLogPanel({ isOpen, onClose, monitoredLocations = []
     } catch (err) {
       console.error('Trigger failed:', err);
       setIsTriggering(false);
+    }
+  };
+
+  const handleSendTestAlert = async () => {
+    setIsSendingAlert(true);
+    setAlertFeedback(null);
+    try {
+      const loc = monitoredLocations.length > 0 
+        ? (monitoredLocations[0].name || monitoredLocations[0].location_name) 
+        : 'Noney (Tupul Railway Corridor)';
+      const res = await triggerTestAlert(loc, 0.95);
+      setAlertFeedback({
+        type: 'success',
+        msg: 'Emergency Alert dispatched! Check your phone on ntfy.sh/bhujanrakshak_alerts'
+      });
+      setTimeout(() => {
+        loadAlerts();
+      }, 1200);
+      setTimeout(() => setAlertFeedback(null), 5000);
+    } catch (err) {
+      setAlertFeedback({
+        type: 'error',
+        msg: 'Alert dispatch failed: ' + err.message
+      });
+      setTimeout(() => setAlertFeedback(null), 5000);
+    } finally {
+      setIsSendingAlert(false);
     }
   };
 
@@ -175,6 +205,16 @@ export default function AlertLogPanel({ isOpen, onClose, monitoredLocations = []
 
           <div className="flex items-center gap-1.5">
             <button
+              onClick={handleSendTestAlert}
+              disabled={isSendingAlert}
+              title="Send live emergency push alert to phone via ntfy (Approach B)"
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Send className={`w-3.5 h-3.5 ${isSendingAlert ? 'animate-bounce' : ''}`} />
+              <span>{isSendingAlert ? 'Sending...' : '🚨 Phone Alert'}</span>
+            </button>
+
+            <button
               onClick={handleManualTrigger}
               disabled={isTriggering}
               title="Trigger immediate AI re-evaluation cycle across all NER locations"
@@ -201,6 +241,20 @@ export default function AlertLogPanel({ isOpen, onClose, monitoredLocations = []
             </button>
           </div>
         </div>
+
+        {/* Live Test Alert Feedback Banner */}
+        {alertFeedback && (
+          <div className={`px-3 py-2 text-xs flex items-center gap-2 border-b shrink-0 animate-in fade-in duration-150 ${
+            alertFeedback.type === 'success' 
+              ? 'bg-emerald-950/90 text-emerald-200 border-emerald-800' 
+              : 'bg-rose-950/90 text-rose-200 border-rose-800'
+          }`}>
+            <span className="font-bold">
+              {alertFeedback.type === 'success' ? '✅ Push Dispatched:' : '⚠️ Push Error:'}
+            </span>
+            <span className="truncate">{alertFeedback.msg}</span>
+          </div>
+        )}
 
         {/* Subscribe Modal Dialog */}
         {showSubscribeModal && (

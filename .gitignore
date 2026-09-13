@@ -64,3 +64,5 @@ desktop.ini
 # Large Geospatial Rasters (DEM GeoTIFFs)
 data_pipeline/dem/*.tif
 data_pipeline/dem/*.tiff
+
+.vercel

@@ -21,10 +21,37 @@ import {
   Clock,
   Flame,
   Droplets,
-  Check
+  Check,
+  Edit3,
+  MapPin,
+  Calculator,
+  Info
 } from 'lucide-react';
+import { triggerTestAlert } from '../services/supabaseClient';
 
 const PRESETS = [
+  {
+    id: 'custom_manual',
+    name: 'Custom User Manual Input',
+    tag: 'Manual Custom Mode',
+    tagColor: 'bg-emerald-950/80 text-emerald-300 border-emerald-800',
+    description: 'Directly type and customize your own weather, slope, and terrain disaster values.',
+    params: {
+      location_name: 'Custom NER Hill Corridor',
+      latitude: 25.1235,
+      longitude: 92.3651,
+      day1_rainfall: 55.0,
+      day2_rainfall: 45.0,
+      day3_rainfall: 35.0,
+      cumulative_3day_rainfall: 135.0,
+      rainfall_anomaly: 105.0,
+      slope: 32.0,
+      elevation: 1100.0,
+      soil_moisture_estimate: 88.0,
+      temperature: 23.5,
+      aspect: 165.0
+    }
+  },
   {
     id: 'tupul_2022',
     name: '2022 Tupul Manipur Disaster',
@@ -113,12 +140,62 @@ const PRESETS = [
 
 export default function EvaluatorSandboxModal({ isOpen, onClose }) {
   const [selectedPresetId, setSelectedPresetId] = useState('tupul_2022');
+  const [entryMode, setEntryMode] = useState('manual'); // 'manual' | 'slider'
   
   // Simulation Input Parameters
-  const [params, setParams] = useState(PRESETS[0].params);
+  const [params, setParams] = useState(PRESETS[1].params);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState(null);
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [isDispatchingPush, setIsDispatchingPush] = useState(false);
+  const [pushSentSuccess, setPushSentSuccess] = useState(false);
+
+  // Helper for manual data field changes with intelligent auto-calculations
+  const handleManualFieldChange = (field, rawValue) => {
+    setParams(prev => {
+      const updated = { ...prev, [field]: rawValue };
+
+      // Auto-calculate cumulative rainfall, anomaly & soil moisture proxy when day rainfall changes
+      if (field === 'day1_rainfall' || field === 'day2_rainfall' || field === 'day3_rainfall') {
+        const d1 = parseFloat(field === 'day1_rainfall' ? rawValue : prev.day1_rainfall) || 0;
+        const d2 = parseFloat(field === 'day2_rainfall' ? rawValue : prev.day2_rainfall) || 0;
+        const d3 = parseFloat(field === 'day3_rainfall' ? rawValue : prev.day3_rainfall) || 0;
+        const total = Math.round((d1 + d2 + d3) * 10) / 10;
+        const anomaly = Math.round((total - 30.0) * 10) / 10;
+        const soilEst = Math.min(99, Math.max(15, Math.round(25.0 + (0.42 * total) + (0.15 * Math.max(0, anomaly)))));
+        updated.cumulative_3day_rainfall = total;
+        updated.rainfall_anomaly = anomaly;
+        updated.soil_moisture_estimate = soilEst;
+      } else if (field === 'cumulative_3day_rainfall') {
+        const total = parseFloat(rawValue) || 0;
+        const anomaly = Math.round((total - 30.0) * 10) / 10;
+        const soilEst = Math.min(99, Math.max(15, Math.round(25.0 + (0.42 * total) + (0.15 * Math.max(0, anomaly)))));
+        updated.rainfall_anomaly = anomaly;
+        updated.soil_moisture_estimate = soilEst;
+      } else if (field === 'elevation') {
+        const elev = parseFloat(rawValue) || 0;
+        updated.temperature = Math.round((28.0 - (elev * 0.0065)) * 10) / 10;
+      }
+
+      return updated;
+    });
+  };
+
+  // Dispatch Emergency Alert via Backend (Approach B) to ntfy.sh
+  const handleDispatchPushAlert = async () => {
+    setIsDispatchingPush(true);
+    try {
+      const loc = params.location_name || 'Simulated Hazard Corridor';
+      const score = evaluationResult ? evaluationResult.score : 0.95;
+      await triggerTestAlert(loc, score);
+      setPushSentSuccess(true);
+      setTimeout(() => setPushSentSuccess(false), 3500);
+    } catch (err) {
+      console.error('Failed dispatching push alert:', err);
+    } finally {
+      setIsDispatchingPush(false);
+    }
+  };
 
   // Apply Preset
   const handleApplyPreset = (preset) => {
@@ -362,189 +439,526 @@ Inference Engine: ${evaluationResult.engineSource}`;
               </div>
             </div>
 
-            {/* 2. Interactive Feature Parameter Sliders */}
-            <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
-                <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-sky-400" />
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    Feature Parameter Modulation
-                  </span>
+            {/* 2. Mode Switcher: Manual Data Entry vs Slider Modulation */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-xl border border-slate-700/80">
+              <button
+                type="button"
+                onClick={() => setEntryMode('manual')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  entryMode === 'manual'
+                    ? 'bg-sky-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Direct Manual Data Entry (Type Values)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntryMode('slider')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  entryMode === 'slider'
+                    ? 'bg-sky-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Slider Modulation Mode</span>
+              </button>
+            </div>
+
+            {/* 3A. DIRECT MANUAL DATA ENTRY MODE */}
+            {entryMode === 'manual' && (
+              <div className="space-y-4">
+                {/* Section A: Target Location & Coordinates */}
+                <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-sky-400" />
+                      <span>1. Target Location & Geo-Coordinates</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">Custom Hill Site</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-1">
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Site / Corridor Name
+                      </label>
+                      <input
+                        type="text"
+                        value={params.location_name || ''}
+                        onChange={(e) => handleManualFieldChange('location_name', e.target.value)}
+                        placeholder="e.g., Tupul Railway Yard"
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 font-sans"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Latitude (°N)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={params.latitude}
+                        onChange={(e) => handleManualFieldChange('latitude', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs text-sky-300 font-mono focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Longitude (°E)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={params.longitude}
+                        onChange={(e) => handleManualFieldChange('longitude', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs text-sky-300 font-mono focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                  </div>
                 </div>
+
+                {/* Section B: Antecedent Rainfall Features (The Core Prediction Trigger) */}
+                <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <CloudRain className="w-3.5 h-3.5 text-sky-400" />
+                      <span>2. Antecedent Rainfall Load (1st, 2nd & 3rd Day Prior)</span>
+                    </span>
+                    <span className="text-[10px] text-sky-400 font-mono">Primary ML Weight (47%)</span>
+                  </div>
+
+                  {/* Day 1, Day 2, Day 3 Inputs */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Day 1 Rain (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={params.day1_rainfall}
+                        onChange={(e) => handleManualFieldChange('day1_rainfall', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-sky-300 focus:outline-none focus:border-sky-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">24h prior</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Day 2 Rain (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={params.day2_rainfall}
+                        onChange={(e) => handleManualFieldChange('day2_rainfall', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-sky-300 focus:outline-none focus:border-sky-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">48h prior</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Day 3 Rain (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={params.day3_rainfall}
+                        onChange={(e) => handleManualFieldChange('day3_rainfall', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-sky-300 focus:outline-none focus:border-sky-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">72h prior</span>
+                    </div>
+                  </div>
+
+                  {/* Cumulative Rain & Anomaly Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-700/40">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[11px] font-bold text-sky-200">
+                          3-Day Cumulative Rain (mm)
+                        </label>
+                        <span className="text-[9px] text-emerald-400 font-mono">Auto-Summed</span>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={params.cumulative_3day_rainfall}
+                        onChange={(e) => handleManualFieldChange('cumulative_3day_rainfall', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-sky-950/60 border border-sky-800 rounded-lg text-xs font-mono font-bold text-sky-200 focus:outline-none focus:border-sky-400"
+                      />
+                      <span className="block text-[9px] text-slate-400 mt-0.5">Threshold: &gt;110 mm triggers high warning</span>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[11px] font-bold text-amber-200">
+                          Rainfall Anomaly (mm)
+                        </label>
+                        <span className="text-[9px] text-amber-400 font-mono">Dev. from Baseline</span>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={params.rainfall_anomaly !== undefined ? params.rainfall_anomaly : Math.round(params.cumulative_3day_rainfall - 30)}
+                        onChange={(e) => handleManualFieldChange('rainfall_anomaly', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-amber-950/40 border border-amber-800/80 rounded-lg text-xs font-mono font-bold text-amber-200 focus:outline-none focus:border-amber-400"
+                      />
+                      <span className="block text-[9px] text-slate-400 mt-0.5">Historical monthly baseline deviation</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section C: Terrain Geomorphology (Slope, Elevation, Aspect) */}
+                <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Mountain className="w-3.5 h-3.5 text-amber-400" />
+                      <span>3. Topography & Geomorphology Features</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">NASA DEM Coordinates</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Slope Angle (°)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="1"
+                        max="65"
+                        value={params.slope}
+                        onChange={(e) => handleManualFieldChange('slope', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">&gt;28° Critical Incline</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Elevation (m)
+                      </label>
+                      <input
+                        type="number"
+                        step="10"
+                        min="30"
+                        max="4000"
+                        value={params.elevation}
+                        onChange={(e) => handleManualFieldChange('elevation', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-sky-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">Meters ASL</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-300 mb-1">
+                        Aspect (°)
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="360"
+                        value={params.aspect}
+                        onChange={(e) => handleManualFieldChange('aspect', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-300 focus:outline-none focus:border-sky-500 text-center"
+                      />
+                      <span className="block text-[9px] text-slate-400 text-center mt-0.5">Compass 0-360°</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section D: Hydrology & Environment (Soil Moisture & Temp) */}
+                <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Droplets className="w-3.5 h-3.5 text-blue-400" />
+                      <span>4. Soil Saturation & Temperature</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">Pore-Water Load</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-300 mb-1">
+                        Soil Moisture Saturation (%)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="15"
+                        max="99"
+                        value={params.soil_moisture_estimate}
+                        onChange={(e) => handleManualFieldChange('soil_moisture_estimate', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-blue-300 focus:outline-none focus:border-blue-500"
+                      />
+                      <span className="block text-[9px] text-slate-400 mt-0.5">Field Capacity: 50% | Liquefaction: &gt;85%</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-rose-300 mb-1 flex items-center gap-1">
+                        <Thermometer className="w-3 h-3 text-rose-400" />
+                        <span>Ambient Temp (°C)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="-10"
+                        max="45"
+                        value={params.temperature}
+                        onChange={(e) => handleManualFieldChange('temperature', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2.5 py-1.5 bg-[#091524] border border-slate-700 rounded-lg text-xs font-mono font-bold text-rose-300 focus:outline-none focus:border-rose-500"
+                      />
+                      <span className="block text-[9px] text-slate-400 mt-0.5">Affects evapotranspiration</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Predict Action Button for Manual Entry */}
                 <button
-                  onClick={() => {
-                    const found = PRESETS.find(p => p.id === selectedPresetId);
-                    if (found) setParams({ ...found.params });
-                  }}
-                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-sky-300 transition-colors"
+                  type="button"
+                  onClick={() => runPrediction(params)}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-sky-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset Slider Values</span>
+                  <Zap className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Predict Landslide Risk on Entered Values</span>
                 </button>
               </div>
+            )}
 
-              {/* Slider 1: 3-Day Cumulative Rainfall */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                    <CloudRain className="w-3.5 h-3.5 text-sky-400" />
-                    <span>3-Day Cumulative Rainfall</span>
-                  </span>
-                  <span className="font-mono font-bold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800">
-                    {params.cumulative_3day_rainfall} mm
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="280"
-                  step="1"
-                  value={params.cumulative_3day_rainfall}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    const d1 = Math.round(val * 0.45 * 10) / 10;
-                    const d2 = Math.round(val * 0.35 * 10) / 10;
-                    const d3 = Math.round((val - d1 - d2) * 10) / 10;
-                    const soilCalc = Math.min(99, Math.round(25 + (val * 0.42)));
-                    setParams(prev => ({
-                      ...prev,
-                      cumulative_3day_rainfall: val,
-                      day1_rainfall: d1,
-                      day2_rainfall: d2,
-                      day3_rainfall: d3,
-                      soil_moisture_estimate: soilCalc
-                    }));
-                  }}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-400"
-                />
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>0 mm (Dry)</span>
-                  <span>65 mm (Monsoon Normal)</span>
-                  <span>140 mm (Severe Cloudburst)</span>
-                  <span>280 mm (Extreme Catastrophe)</span>
-                </div>
-              </div>
-
-              {/* Slider 2: Slope Gradient */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                    <Mountain className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Slope Gradient (Incline Angle)</span>
-                  </span>
-                  <span className="font-mono font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800">
-                    {params.slope}°
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="60"
-                  step="0.5"
-                  value={params.slope}
-                  onChange={(e) => setParams(prev => ({ ...prev, slope: parseFloat(e.target.value) }))}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
-                />
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>1° (Plains)</span>
-                  <span>18° (Moderate Hill)</span>
-                  <span>28° (Tupul Failure Angle)</span>
-                  <span>60° (Sheer Cliff)</span>
-                </div>
-              </div>
-
-              {/* Slider 3: Soil Moisture Saturation */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-                    <Droplets className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Soil Moisture Saturation (GLDAS Proxy)</span>
-                  </span>
-                  <span className="font-mono font-bold text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800">
-                    {params.soil_moisture_estimate}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="15"
-                  max="99"
-                  step="1"
-                  value={params.soil_moisture_estimate}
-                  onChange={(e) => setParams(prev => ({ ...prev, soil_moisture_estimate: parseFloat(e.target.value) }))}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-400"
-                />
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>15% (Dry Crust)</span>
-                  <span>50% (Field Capacity)</span>
-                  <span>85% (High Water Table)</span>
-                  <span>99% (Complete Liquefaction)</span>
-                </div>
-              </div>
-
-              {/* Grid 2-column: Elevation & Temperature */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                {/* Elevation */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300 font-medium">Elevation</span>
-                    <span className="font-mono font-bold text-slate-200">{params.elevation} m</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="50"
-                    max="3500"
-                    step="50"
-                    value={params.elevation}
-                    onChange={(e) => {
-                      const elevVal = parseFloat(e.target.value);
-                      // Auto adjust lapse rate temperature
-                      const autoTemp = Math.round((28.0 - (elevVal * 0.0065)) * 10) / 10;
-                      setParams(prev => ({ ...prev, elevation: elevVal, temperature: autoTemp }));
-                    }}
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-400"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-500">
-                    <span>50m (Valley)</span>
-                    <span>3500m (High Himalaya)</span>
-                  </div>
-                </div>
-
-                {/* Temperature */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="flex items-center gap-1 text-slate-300 font-medium">
-                      <Thermometer className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Temperature</span>
+            {/* 3B. SLIDER MODULATION MODE */}
+            {entryMode === 'slider' && (
+              <div className="bg-[#102035] p-4 rounded-xl border border-slate-700/80 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                      Interactive Parameter Modulation
                     </span>
-                    <span className="font-mono font-bold text-rose-300">{params.temperature} °C</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const found = PRESETS.find(p => p.id === selectedPresetId);
+                      if (found) setParams({ ...found.params });
+                    }}
+                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-sky-300 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset Slider Values</span>
+                  </button>
+                </div>
+
+                {/* Slider 1: 3-Day Cumulative Rainfall */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                      <CloudRain className="w-3.5 h-3.5 text-sky-400" />
+                      <span>3-Day Cumulative Rainfall</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="350"
+                        step="0.5"
+                        value={params.cumulative_3day_rainfall}
+                        onChange={(e) => handleManualFieldChange('cumulative_3day_rainfall', e.target.value)}
+                        className="w-20 px-2 py-0.5 bg-sky-950/80 border border-sky-800 text-sky-300 rounded font-mono font-bold text-xs text-right focus:outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400 font-mono">mm</span>
+                    </div>
                   </div>
                   <input
                     type="range"
-                    min="-5"
-                    max="40"
-                    step="0.5"
-                    value={params.temperature}
-                    onChange={(e) => setParams(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-rose-400"
+                    min="0"
+                    max="280"
+                    step="1"
+                    value={params.cumulative_3day_rainfall}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      const d1 = Math.round(val * 0.45 * 10) / 10;
+                      const d2 = Math.round(val * 0.35 * 10) / 10;
+                      const d3 = Math.round((val - d1 - d2) * 10) / 10;
+                      const soilCalc = Math.min(99, Math.round(25 + (val * 0.42)));
+                      setParams(prev => ({
+                        ...prev,
+                        cumulative_3day_rainfall: val,
+                        day1_rainfall: d1,
+                        day2_rainfall: d2,
+                        day3_rainfall: d3,
+                        rainfall_anomaly: Math.round(val - 30.0),
+                        soil_moisture_estimate: soilCalc
+                      }));
+                    }}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-400"
                   />
-                  <div className="flex justify-between text-[9px] text-slate-500">
-                    <span>-5°C (Freeze)</span>
-                    <span>40°C (Hot)</span>
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>0 mm (Dry)</span>
+                    <span>65 mm (Monsoon Normal)</span>
+                    <span>140 mm (Severe Cloudburst)</span>
+                    <span>280 mm (Extreme Catastrophe)</span>
+                  </div>
+                </div>
+
+                {/* Slider 2: Slope Gradient */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                      <Mountain className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Slope Gradient (Incline Angle)</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="65"
+                        step="0.5"
+                        value={params.slope}
+                        onChange={(e) => handleManualFieldChange('slope', parseFloat(e.target.value) || 0)}
+                        className="w-16 px-2 py-0.5 bg-amber-950/80 border border-amber-800 text-amber-300 rounded font-mono font-bold text-xs text-right focus:outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400 font-mono">°</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="60"
+                    step="0.5"
+                    value={params.slope}
+                    onChange={(e) => setParams(prev => ({ ...prev, slope: parseFloat(e.target.value) }))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>1° (Plains)</span>
+                    <span>18° (Moderate Hill)</span>
+                    <span>28° (Tupul Failure Angle)</span>
+                    <span>60° (Sheer Cliff)</span>
+                  </div>
+                </div>
+
+                {/* Slider 3: Soil Moisture Saturation */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1.5 text-slate-300 font-medium">
+                      <Droplets className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Soil Moisture Saturation (GLDAS Proxy)</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="15"
+                        max="99"
+                        step="0.5"
+                        value={params.soil_moisture_estimate}
+                        onChange={(e) => handleManualFieldChange('soil_moisture_estimate', parseFloat(e.target.value) || 0)}
+                        className="w-16 px-2 py-0.5 bg-blue-950/80 border border-blue-800 text-blue-300 rounded font-mono font-bold text-xs text-right focus:outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400 font-mono">%</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="15"
+                    max="99"
+                    step="1"
+                    value={params.soil_moisture_estimate}
+                    onChange={(e) => setParams(prev => ({ ...prev, soil_moisture_estimate: parseFloat(e.target.value) }))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-400"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>15% (Dry Crust)</span>
+                    <span>50% (Field Capacity)</span>
+                    <span>85% (High Water Table)</span>
+                    <span>99% (Complete Liquefaction)</span>
+                  </div>
+                </div>
+
+                {/* Grid 2-column: Elevation & Temperature with direct inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  {/* Elevation */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300 font-medium">Elevation</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="50"
+                          max="3500"
+                          step="10"
+                          value={params.elevation}
+                          onChange={(e) => handleManualFieldChange('elevation', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-0.5 bg-slate-900 border border-slate-700 text-slate-200 rounded font-mono font-bold text-xs text-right focus:outline-none"
+                        />
+                        <span className="text-[11px] text-slate-400 font-mono">m</span>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="3500"
+                      step="50"
+                      value={params.elevation}
+                      onChange={(e) => {
+                        const elevVal = parseFloat(e.target.value);
+                        const autoTemp = Math.round((28.0 - (elevVal * 0.0065)) * 10) / 10;
+                        setParams(prev => ({ ...prev, elevation: elevVal, temperature: autoTemp }));
+                      }}
+                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-400"
+                    />
+                    <div className="flex justify-between text-[9px] text-slate-500">
+                      <span>50m (Valley)</span>
+                      <span>3500m (High Himalaya)</span>
+                    </div>
+                  </div>
+
+                  {/* Temperature */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="flex items-center gap-1 text-slate-300 font-medium">
+                        <Thermometer className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Temperature</span>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="-10"
+                          max="45"
+                          step="0.5"
+                          value={params.temperature}
+                          onChange={(e) => handleManualFieldChange('temperature', parseFloat(e.target.value) || 0)}
+                          className="w-16 px-2 py-0.5 bg-slate-900 border border-slate-700 text-rose-300 rounded font-mono font-bold text-xs text-right focus:outline-none"
+                        />
+                        <span className="text-[11px] text-slate-400 font-mono">°C</span>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="-5"
+                      max="40"
+                      step="0.5"
+                      value={params.temperature}
+                      onChange={(e) => setParams(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                      className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-rose-400"
+                    />
+                    <div className="flex justify-between text-[9px] text-slate-500">
+                      <span>-5°C (Freeze)</span>
+                      <span>40°C (Hot)</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Target Location Metadata */}
-            <div className="p-3 bg-[#0a182a] rounded-lg border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
-              <div>
-                <span className="text-slate-500">Simulated Location:</span>{' '}
-                <span className="font-semibold text-slate-200">{params.location_name}</span>
-              </div>
-              <div className="font-mono text-[11px] text-slate-400">
-                GPS: {params.latitude}°, {params.longitude}°
-              </div>
-            </div>
+            )}
 
           </div>
 
@@ -673,8 +1087,31 @@ Inference Engine: ${evaluationResult.engineSource}`;
             {/* Bottom Actions for Jury / Evaluators */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
               <button
+                onClick={handleDispatchPushAlert}
+                disabled={isDispatchingPush}
+                title="Dispatch emergency push notification via backend to ntfy.sh (Approach B)"
+                className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer ${
+                  pushSentSuccess
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white border border-rose-500/50'
+                } disabled:opacity-50`}
+              >
+                {pushSentSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                    <span>Alert Dispatched to Phone (ntfy.sh)!</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className={`w-4 h-4 ${isDispatchingPush ? 'animate-spin' : 'animate-pulse text-amber-300'}`} />
+                    <span>{isDispatchingPush ? 'Dispatching Push Alert...' : '🚨 Dispatch Live Alert to Phone'}</span>
+                  </>
+                )}
+              </button>
+
+              <button
                 onClick={handleCopySummary}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-md transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-md transition-all cursor-pointer"
               >
                 {copiedNotification ? (
                   <>

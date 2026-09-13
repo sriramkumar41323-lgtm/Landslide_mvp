@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MoreVertical, 
   CloudRain, 
@@ -10,8 +10,10 @@ import {
   ExternalLink,
   ChevronRight,
   Truck,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
+import { fetchAllStationWeather } from '../services/liveWeatherService';
 
 export default function AuthorityDashboard({
   telemetry,
@@ -21,6 +23,27 @@ export default function AuthorityDashboard({
   onClose
 }) {
   const [evacuatedVillages, setEvacuatedVillages] = useState({});
+  const [liveStations, setLiveStations] = useState([]);
+  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
+  const [activeWeatherTab, setActiveWeatherTab] = useState('stations'); // 'stations' | 'models'
+
+  const refreshStationWeather = async () => {
+    setIsWeatherLoading(true);
+    try {
+      const data = await fetchAllStationWeather();
+      setLiveStations(data);
+    } catch (e) {
+      console.error('Failed to load station weather in dashboard:', e);
+    } finally {
+      setIsWeatherLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshStationWeather();
+    const interval = setInterval(refreshStationWeather, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleEvacuateToggle = (id) => {
     setEvacuatedVillages(prev => ({
@@ -203,41 +226,103 @@ export default function AuthorityDashboard({
       <section className="bg-white rounded-lg border border-slate-200/90 p-3.5 shadow-sm">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <h3 className="text-xs font-bold text-slate-900 tracking-tight">
-              Weather-Linked Risk Forecasts
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-slate-900 tracking-tight">
+                Weather & Rainfall Telemetry
+              </h3>
+              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            </div>
             <p className="text-[10px] text-slate-500">
-              IMD API predictions from forecasts
+              Live meteorological observations & models
             </p>
           </div>
-          <button className="text-[10px] font-medium text-sky-600 hover:text-sky-700 flex items-center gap-0.5">
-            <span>Rainfall predictions</span>
-          </button>
+          
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveWeatherTab(activeWeatherTab === 'stations' ? 'models' : 'stations')}
+              className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 transition-colors"
+            >
+              {activeWeatherTab === 'stations' ? 'View Forecasts' : 'View Stations'}
+            </button>
+            <button
+              onClick={refreshStationWeather}
+              disabled={isWeatherLoading}
+              title="Refresh live observations"
+              className="text-slate-400 hover:text-slate-600 p-0.5"
+            >
+              <RefreshCw className={`w-3 h-3 ${isWeatherLoading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        {/* 6-Column Forecast Row matching photo */}
-        <div className="grid grid-cols-6 gap-1 pt-1 text-center">
-          {weatherForecasts.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div 
-                key={idx}
-                className="flex flex-col items-center p-1.5 rounded-md bg-slate-50/80 border border-slate-100 hover:bg-slate-100 transition-colors"
-              >
-                <Icon className={`w-4 h-4 mb-1 ${item.color}`} />
-                <span className="text-[9px] font-semibold text-slate-700 leading-tight">
-                  {item.label}
-                </span>
-                <span className="text-[8px] text-slate-400 font-mono scale-90">
-                  {item.source}
-                </span>
-                <span className="text-[9px] font-bold text-slate-800 mt-1">
-                  {item.rain}
-                </span>
+        {activeWeatherTab === 'stations' ? (
+          /* Live Stations Grid */
+          <div className="space-y-1.5 pt-1">
+            {liveStations && liveStations.length > 0 ? (
+              liveStations.slice(0, 4).map((item) => {
+                const w = item.weather || {};
+                const isHeavy = (w.precipitationRate || 0) > 20;
+                return (
+                  <div 
+                    key={item.id}
+                    className="flex items-center justify-between p-2 rounded-md bg-slate-50 border border-slate-100 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded bg-white border border-slate-200 text-blue-600">
+                        {isHeavy ? <CloudRain className="w-3.5 h-3.5 text-blue-600" /> : <Cloud className="w-3.5 h-3.5 text-slate-500" />}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-800 text-[11px] leading-tight">
+                          {item.name.split('(')[0]}
+                        </div>
+                        <div className="text-[9px] text-slate-500">
+                          {w.weatherLabel || 'Monsoon Season'} • {w.humidity || 80}% RH
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="font-bold text-slate-900 text-xs">
+                        {w.temperature !== undefined ? `${w.temperature}°C` : '--'}
+                      </div>
+                      <div className={`text-[10px] font-semibold ${isHeavy ? 'text-red-600' : 'text-slate-600'}`}>
+                        {w.precipitationRate !== undefined ? `${w.precipitationRate} mm/h` : '0 mm/h'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-4 text-[11px] text-slate-400">
+                Loading live station observations...
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        ) : (
+          /* 6-Column Forecast Row matching reference */
+          <div className="grid grid-cols-6 gap-1 pt-1 text-center">
+            {weatherForecasts.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <div 
+                  key={idx}
+                  className="flex flex-col items-center p-1.5 rounded-md bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors"
+                >
+                  <Icon className={`w-4 h-4 mb-1 ${item.color}`} />
+                  <span className="text-[9px] font-semibold text-slate-700 leading-tight">
+                    {item.label}
+                  </span>
+                  <span className="text-[8px] text-slate-400 font-mono scale-90">
+                    {item.source}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-800 mt-1">
+                    {item.rain}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* =================================================================== */}

@@ -251,6 +251,62 @@ export async function triggerBackendPipeline() {
 }
 
 /**
+ * Trigger immediate emergency alert via backend /test-alert (Approach B)
+ * Dispatches to ntfy.sh and SMS, and writes to database log.
+ * Includes graceful direct push fallback if backend is offline.
+ */
+export async function triggerTestAlert(locationName = 'Noney (Tupul Railway Corridor)', riskScore = 0.95, phone = null) {
+  try {
+    const res = await fetch(`${FASTAPI_BASE_URL}/test-alert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location_name: locationName,
+        risk_score: riskScore,
+        phone: phone
+      })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[FastAPI test-alert] Backend unreachable, using direct ntfy fallback:', err.message);
+  }
+
+  // Resilient fallback: Direct ntfy.sh push if FastAPI is not active
+  try {
+    const riskPct = (riskScore * 100).toFixed(1);
+    const ntfyResp = await fetch('https://ntfy.sh/bhujanrakshak_alerts', {
+      method: 'POST',
+      headers: {
+        'Title': `EMERGENCY: High Landslide Risk (${riskPct}%)`,
+        'Priority': 'urgent',
+        'Tags': 'warning,rotating_light'
+      },
+      body: `CRITICAL ALERT: High landslide risk detected near ${locationName}. Risk score: ${riskPct}%. Evacuation guidance active.`
+    });
+    if (ntfyResp.ok) {
+      return {
+        status: 'success',
+        ntfy_url: 'https://ntfy.sh/bhujanrakshak_alerts',
+        source: 'client_ntfy_fallback',
+        dispatched_alerts: [
+          {
+            channel: 'NTFY_PUSH',
+            recipient: 'ntfy.sh/bhujanrakshak_alerts',
+            status: 'SENT (ntfy.sh Direct Push)'
+          }
+        ]
+      };
+    }
+  } catch (ntfyErr) {
+    console.error('Direct ntfy push failed:', ntfyErr);
+  }
+
+  return { status: 'error', message: 'Failed to dispatch alert' };
+}
+
+/**
  * Subscribe a phone number for SMS early warning alerts
  */
 export async function subscribePhoneNumber(name, phone, locationName) {

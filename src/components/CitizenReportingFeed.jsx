@@ -16,7 +16,9 @@ import {
   CheckCircle2,
   X,
   ExternalLink,
-  Eye
+  Eye,
+  Trash2,
+  ImageOff
 } from 'lucide-react';
 import { CITIZEN_FEED_REPORTS } from '../data/citizenReportsData';
 
@@ -24,7 +26,10 @@ export default function CitizenReportingFeed({
   reports = CITIZEN_FEED_REPORTS,
   selectedReportId,
   onSelectReport,
-  onOpenReportModal
+  onOpenReportModal,
+  onCloseFeed,
+  onDeleteReport,
+  onDeleteImage
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'mountain_crack' | 'climate_weather' | 'pending'
@@ -72,13 +77,24 @@ export default function CitizenReportingFeed({
             </p>
           </div>
         </div>
-        <button 
-          onClick={onOpenReportModal}
-          title="Submit new geo-report"
-          className="p-1 rounded text-sky-600 hover:text-sky-700 hover:bg-sky-50 transition-colors"
-        >
-          <PlusCircle className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={onOpenReportModal}
+            title="Submit new geo-report"
+            className="p-1 rounded text-sky-600 hover:text-sky-700 hover:bg-sky-50 transition-colors cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+          </button>
+          {onCloseFeed && (
+            <button 
+              onClick={onCloseFeed}
+              title="Close Control Center Feed"
+              className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2. Search Analyst or Map Bar */}
@@ -157,10 +173,13 @@ export default function CitizenReportingFeed({
             const isMountainCrack = report.report_type === 'mountain_crack' || report.crackWidth || report.crack_width_cm;
             const isPendingSync = report.sync_status === 'pending';
 
-            const imageUrl = (report.image && report.image.length > 10) 
-              ? report.image 
-              : (report.image_data && report.image_data.length > 10) 
-              ? report.image_data 
+            const hasValidImage = !report.hasDeletedImage && Boolean(
+              (report.image && report.image.length > 10) || 
+              (report.image_data && report.image_data.length > 10)
+            );
+
+            const imageUrl = hasValidImage
+              ? (report.image || report.image_data)
               : 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80';
 
             return (
@@ -175,65 +194,104 @@ export default function CitizenReportingFeed({
                     : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
                 }`}
               >
-                {/* Photo Thumbnail with Overlays */}
-                <div className="relative aspect-[16/9] w-full bg-slate-100 overflow-hidden">
-                  <img
-                    src={imageUrl}
-                    alt={report.title || 'Hazard Report'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = 'https://images.unsplash.com/photo-1508873696983-2df5293cb395?w=600&auto=format&fit=crop&q=80';
-                    }}
-                  />
+                {/* Photo Thumbnail or Removed Placeholder */}
+                {hasValidImage ? (
+                  <div className="relative aspect-[16/9] w-full bg-slate-100 overflow-hidden">
+                    <img
+                      src={imageUrl}
+                      alt={report.title || 'Hazard Report'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1508873696983-2df5293cb395?w=600&auto=format&fit=crop&q=80';
+                      }}
+                    />
 
-                  {/* Video Play Icon Overlay */}
-                  {report.hasVideo && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                      <div className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm border border-white/40 flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
-                        <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+                    {/* Video Play Icon Overlay */}
+                    {report.hasVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                        <div className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm border border-white/40 flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                          <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+                        </div>
                       </div>
+                    )}
+
+                    {/* Category Pill (Top Left) */}
+                    <div className="absolute top-2 left-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-sm ${
+                        isMountainCrack ? 'bg-amber-600' : 'bg-sky-600'
+                      }`}>
+                        {isMountainCrack ? <Mountain className="w-3 h-3" /> : <CloudRain className="w-3 h-3" />}
+                        <span>{isMountainCrack ? 'Mountain Crack' : 'Climate Event'}</span>
+                      </span>
                     </div>
-                  )}
 
-                  {/* Category Pill (Top Left) */}
-                  <div className="absolute top-2 left-2">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-sm ${
-                      isMountainCrack ? 'bg-amber-600' : 'bg-sky-600'
-                    }`}>
-                      {isMountainCrack ? <Mountain className="w-3 h-3" /> : <CloudRain className="w-3 h-3" />}
-                      <span>{isMountainCrack ? 'Mountain Crack' : 'Climate Event'}</span>
-                    </span>
+                    {/* Severity pill (Top Right) */}
+                    <div className="absolute top-2 right-2">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white shadow-sm ${
+                        report.severity === 'Critical' ? 'bg-red-600' : 'bg-amber-600'
+                      }`}>
+                        {report.severity}
+                      </span>
+                    </div>
+
+                    {/* Actions on Thumbnail (Lower Right: Inspect & Delete Image) */}
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage({ url: imageUrl, report });
+                        }}
+                        title="Inspect High-Res Photo"
+                        className="flex items-center justify-center w-6 h-6 rounded bg-black/70 hover:bg-black text-white text-xs backdrop-blur-sm transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm("Do you want to delete this photo from the report?")) {
+                            onDeleteImage && onDeleteImage(report.id);
+                          }
+                        }}
+                        title="Delete this Photo"
+                        className="flex items-center justify-center w-6 h-6 rounded bg-black/70 hover:bg-red-600 text-white text-xs backdrop-blur-sm transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Geo-tagged Tag (Lower Left) */}
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm text-[9px] font-mono text-white">
+                      <Camera className="w-3 h-3 text-slate-300" />
+                      <span>{report.latitude ? `${report.latitude}, ${report.longitude}` : 'Geo-tagged'}</span>
+                    </div>
                   </div>
-
-                  {/* Severity pill (Top Right) */}
-                  <div className="absolute top-2 right-2">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white shadow-sm ${
-                      report.severity === 'Critical' ? 'bg-red-600' : 'bg-amber-600'
-                    }`}>
-                      {report.severity}
-                    </span>
+                ) : (
+                  <div className="relative aspect-[16/9] w-full bg-slate-100 flex flex-col items-center justify-center text-slate-400 border-b border-slate-100">
+                    <ImageOff className="w-6 h-6 text-slate-300 mb-1" />
+                    <span className="text-[10px] font-medium text-slate-500">Photo Removed / Not Attached</span>
+                    {/* Category Pill (Top Left) */}
+                    <div className="absolute top-2 left-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-sm ${
+                        isMountainCrack ? 'bg-amber-600' : 'bg-sky-600'
+                      }`}>
+                        {isMountainCrack ? <Mountain className="w-3 h-3" /> : <CloudRain className="w-3 h-3" />}
+                        <span>{isMountainCrack ? 'Mountain Crack' : 'Climate Event'}</span>
+                      </span>
+                    </div>
+                    {/* Severity pill (Top Right) */}
+                    <div className="absolute top-2 right-2">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-white shadow-sm ${
+                        report.severity === 'Critical' ? 'bg-red-600' : 'bg-amber-600'
+                      }`}>
+                        {report.severity}
+                      </span>
+                    </div>
                   </div>
-
-                  {/* Click to inspect image button (Lower Right) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreviewImage({ url: imageUrl, report });
-                    }}
-                    title="Inspect High-Res Photo"
-                    className="absolute bottom-2 right-2 flex items-center justify-center w-6 h-6 rounded bg-black/70 hover:bg-black text-white text-xs backdrop-blur-sm transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Geo-tagged Tag (Lower Left) */}
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm text-[9px] font-mono text-white">
-                    <Camera className="w-3 h-3 text-slate-300" />
-                    <span>{report.latitude ? `${report.latitude}, ${report.longitude}` : 'Geo-tagged'}</span>
-                  </div>
-                </div>
+                )}
 
                 {/* Card Meta & Description */}
                 <div className="p-2.5">
@@ -274,9 +332,26 @@ export default function CitizenReportingFeed({
                         {report.climate_condition || 'Heavy Precipitation'}
                       </span>
                     )}
-                    <span className="px-1.5 py-0.2 bg-slate-100 rounded text-slate-700 font-semibold">
-                      {report.corridor || 'NH-6'}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="px-1.5 py-0.2 bg-slate-100 rounded text-slate-700 font-semibold">
+                        {report.corridor || 'NH-6'}
+                      </span>
+                      {onDeleteReport && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm("Are you sure you want to delete this report from the feed?")) {
+                              onDeleteReport(report.id);
+                            }
+                          }}
+                          title="Delete this hazard report"
+                          className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -313,12 +388,40 @@ export default function CitizenReportingFeed({
                   {previewImage.report.location || previewImage.report.location_name}
                 </span>
               </div>
-              <button
-                onClick={() => setPreviewImage(null)}
-                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (window.confirm("Do you want to delete this photo from the report?")) {
+                      onDeleteImage && onDeleteImage(previewImage.report.id);
+                      setPreviewImage(null);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-600/90 hover:bg-red-600 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                  title="Delete Photo"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Photo</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm("Do you want to delete this entire report from the feed?")) {
+                      onDeleteReport && onDeleteReport(previewImage.report.id);
+                      setPreviewImage(null);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-red-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+                  title="Delete Entire Report"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Report</span>
+                </button>
+                <button
+                  onClick={() => setPreviewImage(null)}
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="relative aspect-video w-full bg-black">
